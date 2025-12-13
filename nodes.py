@@ -14,6 +14,7 @@ except ImportError:
 
 import comfy.model_management
 import node_helpers
+from server import PromptServer
 from comfy.utils import ProgressBar
 from comfy_extras.nodes_post_processing import gaussian_kernel
 from .raft import *
@@ -1900,6 +1901,25 @@ class PrintSigmas:
         return (sigmas,)
 
 
+class ShowSigmas:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {"sigmas": ("SIGMAS",)},
+            "hidden": {"unique_id": "UNIQUE_ID",},
+        }
+
+    RETURN_TYPES = ("SIGMAS",)
+    FUNCTION = "show_sigmas"
+    OUTPUT_NODE = True
+    CATEGORY = "Image-Filters/utils"
+    
+    def show_sigmas(self, sigmas, unique_id=None):
+        if unique_id:
+            PromptServer.instance.send_progress_text(f"{sigmas}", unique_id)
+        return (sigmas,)
+
+
 class VisualizeLatents:
     @classmethod
     def INPUT_TYPES(s):
@@ -2311,6 +2331,7 @@ COMBINED_MAPPINGS = {
     "RemapRange":                 (RemapRange,                 "Remap Range"),
     "RestoreDetail":              (RestoreDetail,              "Restore Detail"),
     "SharpenFilterLatent":        (SharpenFilterLatent,        "Sharpen Filter (Latent)"),
+    "ShowSigmas":                 (ShowSigmas,                 "Show Sigmas"),
     "ShuffleChannels":            (ShuffleChannels,            "Shuffle Channels"),
     "Tonemap":                    (Tonemap,                    "Tonemap"),
     "UnJitterImage":              (UnJitterImage,              "Un-Jitter Image"),
