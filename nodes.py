@@ -19,19 +19,36 @@ from comfy.utils import ProgressBar
 from comfy_extras.nodes_post_processing import gaussian_kernel
 from .raft import *
 
+from concurrent.futures import ThreadPoolExecutor
+
 MAX_RESOLUTION=8192
 
 # gaussian blur a tensor image batch in format [B x H x W x C] on H/W (spatial, per-image, per-channel)
 def cv_blur_tensor(images, dx, dy):
     if min(dx, dy) > 100:
         np_img = F.interpolate(images.detach().clone().movedim(-1,1), scale_factor=0.1, mode='bilinear').movedim(1,-1).cpu().numpy()
-        for index, image in enumerate(np_img):
+ #       for index, image in enumerate(np_img):
+ #           np_img[index] = cv2.GaussianBlur(image, (dx // 20 * 2 + 1, dy // 20 * 2 + 1), 0)
+        def blur_item(idx_img):
+            index, image = idx_img
             np_img[index] = cv2.GaussianBlur(image, (dx // 20 * 2 + 1, dy // 20 * 2 + 1), 0)
+        with ThreadPoolExecutor() as executor:
+            list(executor.map(blur_item, enumerate(np_img)))
+
+
         return F.interpolate(torch.from_numpy(np_img).movedim(-1,1), size=(images.shape[1], images.shape[2]), mode='bilinear').movedim(1,-1)
     else:
         np_img = images.detach().clone().cpu().numpy()
-        for index, image in enumerate(np_img):
+
+        #for index, image in enumerate(np_img):
+        #    np_img[index] = cv2.GaussianBlur(image, (dx, dy), 0)
+
+        def blur_item(idx_img):
+            index, image = idx_img
             np_img[index] = cv2.GaussianBlur(image, (dx, dy), 0)
+        with ThreadPoolExecutor() as executor:
+            list(executor.map(blur_item, enumerate(np_img)))
+
         return torch.from_numpy(np_img)
 
 # guided filter a tensor image batch in format [B x H x W x C] on H/W (spatial, per-image, per-channel)
@@ -429,8 +446,14 @@ class BlurMaskFast:
         
         dup = copy.deepcopy(masks.cpu().numpy())
         
-        for index, mask in enumerate(dup):
-            dup[index] = cv2.GaussianBlur(mask, (dx, dy), 0)
+#        for index, mask in enumerate(dup):
+#            dup[index] = cv2.GaussianBlur(mask, (dx, dy), 0)
+        def blur_item(idx_img):
+            index, image = idx_img
+            dup[index] = cv2.GaussianBlur(image, (dx, dy), 0)
+
+        with ThreadPoolExecutor() as executor:
+            list(executor.map(blur_item, enumerate(dup)))
         
         return (torch.from_numpy(dup),)
 
@@ -560,11 +583,21 @@ class DilateErodeMask:
         
         dup = copy.deepcopy(masks.cpu().numpy())
         
-        for index, mask in enumerate(dup):
+        #for index, mask in enumerate(dup):
+        #    if radius > 0:
+        #        dup[index] = cv2.dilate(mask, k, iterations=1)
+        #    else:
+        #        dup[index] = cv2.erode(mask, k, iterations=1)
+
+        def process_item(idx_mask):
+            index, mask = idx_mask
             if radius > 0:
                 dup[index] = cv2.dilate(mask, k, iterations=1)
             else:
                 dup[index] = cv2.erode(mask, k, iterations=1)
+
+        with ThreadPoolExecutor() as executor:
+            list(executor.map(process_item, enumerate(dup)))
         
         return (torch.from_numpy(dup),)
 
